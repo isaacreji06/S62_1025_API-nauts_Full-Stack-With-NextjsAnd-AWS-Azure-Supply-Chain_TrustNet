@@ -310,3 +310,20 @@ This workflow helps because:
 ![alt text](image-3.png)
 
 ![alt text](image-4.png)
+
+🔧 Environment-Aware Build Setup
+
+We created .env.development, .env.staging, and .env.production for each environment.
+Secrets are securely stored using GitHub Secrets and injected via CI/CD pipelines.
+
+Build scripts:
+
+npm run build:dev → Local testing
+
+npm run build:staging → Staging deployment
+
+npm run build:production → Production deployment
+
+Why this matters:
+This setup ensures consistent deployments and protects sensitive credentials across environments.
+No real secrets are ever committed to GitHub.

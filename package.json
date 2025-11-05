@@ -9,10 +9,22 @@
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "format": "prettier --write .",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "build:dev": "env-cmd -f .env.development next build",
+    "build:staging": "env-cmd -f .env.staging next build",
+    "build:production": "env-cmd -f .env.production next build"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
+    "next": "16.0.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "bcryptjs": "^3.0.3",
@@ -25,19 +37,22 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "autoprefixer": "^10.4.19",
+    "autoprefixer": "^10.4.21",
+    "env-cmd": "^11.0.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.0.4",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
     "husky": "^9.0.11",
     "lint-staged": "^15.2.2",
-    "postcss": "^8.4.38",
+    "postcss": "^8.5.6",
     "prettier": "^3.2.5",
-    "tailwindcss": "^3.4.3",
+    "prisma": "^6.18.0",
+    "tailwindcss": "^3.4.18",
     "typescript": "^5.3.3"
   },
   "lint-staged": {
