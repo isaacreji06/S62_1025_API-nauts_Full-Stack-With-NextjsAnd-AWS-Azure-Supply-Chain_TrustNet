@@ -327,3 +327,35 @@ npm run build:production → Production deployment
 Why this matters:
 This setup ensures consistent deployments and protects sensitive credentials across environments.
 No real secrets are ever committed to GitHub.
+
+## Database Schema
+
+Our PostgreSQL schema enables core features:
+
+**User Management**: Phone-based authentication with roles (Customer/Business Owner/Admin)
+
+**Business** Profiles: Complete business info with trust scoring and multiple verification methods (phone, community, UPI)
+
+**Trust System**: Reviews (1-5 stars), endorsements from community, and calculated trust scores
+
+**UPI Integration**: Transaction pattern analysis without storing personal financial data
+
+**Analytics**: Pre-computed metrics for fast dashboard performance
+
+### Key Features
+
+Privacy-first: Only aggregated UPI insights, no personal transaction data
+
+Scalable design: CUID identifiers, proper indexing, cascade deletes
+
+Multiple verification: Progressive trust building through different methods
+
+Performance optimized: Indexed fields, efficient relationships
+
+Quick Start
+
+1. npm run db:generate # Generate Prisma client
+2. npm run db:push # Update database schema
+3. npm run db:seed # Add sample data
+4. npm run db:studio # Database GUI
+5. The schema supports TrustNet's mission of building digital credibility for local businesses through community-powered verification.
