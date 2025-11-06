@@ -1,9 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,9 +8,172 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User{
-  id Int @id @default(autoincrement())
-  email String @unique
-  name String
+model User {
+  id          String    @id @default(cuid())
+  phone       String    @unique
+  name        String
+  email       String?
+  role        UserRole  @default(CUSTOMER)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  businesses    Business[]
+  reviews       Review[]
+  endorsements  Endorsement[]
+  
+  @@map("users")
 }
 
+model Business {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  category    BusinessCategory
+  address     String?
+  phone       String
+  location    String?
+  
+  // Trust & Verification
+  trustScore    Float     @default(0)
+  isVerified    Boolean   @default(false)
+  verificationMethod VerificationMethod?
+  
+  // UPI Verification
+  upiId              String?
+  upiVerified        Boolean   @default(false)
+  upiVerificationDate DateTime?
+  transactionCount   Int       @default(0)
+  
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  reviews     Review[]
+  endorsements Endorsement[]
+  analytics   BusinessAnalytics?
+  upiTransactions UPI_Transaction[] // ADD THIS LINE - FIXES THE ERROR
+  
+  @@map("businesses")
+  @@index([trustScore])
+  @@index([category])
+  @@index([isVerified])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  rating      Int      // 1-5 stars
+  comment     String?
+  
+  // Verification
+  isVerified  Boolean  @default(false)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  reviewerId  String
+  reviewer    User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+  
+  @@map("reviews")
+  @@index([businessId])
+  @@index([rating])
+}
+
+model Endorsement {
+  id          String   @id @default(cuid())
+  relationship EndorsementType // "CUSTOMER", "NEIGHBOR", "SUPPLIER"
+  message     String?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  endorserId  String
+  endorser    User     @relation(fields: [endorserId], references: [id], onDelete: Cascade)
+  
+  @@map("endorsements")
+  @@unique([businessId, endorserId]) // Prevent duplicate endorsements
+  @@index([businessId])
+}
+
+model BusinessAnalytics {
+  id          String   @id @default(cuid())
+  
+  // Metrics
+  totalReviews     Int     @default(0)
+  averageRating    Float   @default(0)
+  totalEndorsements Int    @default(0)
+  monthlyVisits    Int     @default(0)
+  
+  // UPI Insights
+  upiTransactionVolume  Float   @default(0)
+  customerRetentionRate Float   @default(0)
+  
+  // Timestamps
+  lastUpdated   DateTime @default(now())
+  
+  // Relations
+  businessId    String   @unique
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@map("business_analytics")
+}
+
+model UPI_Transaction {
+  id          String   @id @default(cuid())
+  upiId       String
+  amount      Float
+  timestamp   DateTime
+  
+  // Analysis data (aggregated, no personal info)
+  transactionType String? // "PURCHASE", "SERVICE", etc.
+  customerPattern String? // "NEW", "RETURNING"
+  
+  // Relations
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@map("upi_transactions")
+  @@index([businessId])
+  @@index([timestamp])
+}
+
+// Enums
+enum UserRole {
+  CUSTOMER
+  BUSINESS_OWNER
+  ADMIN
+}
+
+enum BusinessCategory {
+  FOOD_RESTAURANT
+  RETAIL_SHOP
+  SERVICES
+  HOME_BUSINESS
+  STREET_VENDOR
+  ARTISAN
+  OTHER
+}
+
+enum VerificationMethod {
+  PHONE_OTP
+  COMMUNITY_ENDORSEMENT
+  UPI_VERIFICATION
+  DOCUMENT_VERIFICATION
+}
+
+enum EndorsementType {
+  CUSTOMER
+  NEIGHBOR
+  SUPPLIER
+  COMMUNITY_MEMBER
+}
