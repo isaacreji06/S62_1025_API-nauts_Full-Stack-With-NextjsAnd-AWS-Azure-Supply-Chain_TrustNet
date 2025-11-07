@@ -479,3 +479,109 @@ All API responses in this project follow a consistent format to improve develope
   "timestamp": "2025-11-07T10:00:00Z"
 }
 ```
+⚙️ How the Dockerfile Works
+The Dockerfile defines how the TrustNet Next.js application is built, bundled, and run inside a lightweight containerized environment.
+Step-by-step breakdown:
+Base Image –
+
+ FROM node:20-alpine
+ Uses a minimal Node.js 20 image for efficiency and security. The alpine variant ensures smaller image size and faster builds.
+
+Working Directory Setup –
+
+ WORKDIR /app
+ Sets /app as the directory inside the container where all files and commands will execute.
+
+Dependency Installation –
+
+ COPY package*.json ./
+RUN npm install
+ Copies dependency files and installs them first, taking advantage of Docker layer caching — so dependencies aren’t reinstalled every build unless they change.
+
+Project Build –
+
+ COPY . .
+RUN npm run build
+ Copies the rest of the source code and builds the production-ready Next.js app.
+
+Expose Port & Run App –
+
+ EXPOSE 3000
+CMD ["npm", "run", "start"]
+ Exposes port 3000 (the default Next.js port) and launches the app using the production build.
+
+✅ Outcome:
+ When built, this container runs the TrustNet app with all dependencies isolated — ready for deployment or local development.
+
+🧱 How the Docker Compose File Works
+The docker-compose.yml file orchestrates multiple containers — the app, PostgreSQL database, and Redis cache — to work together in one cohesive environment.
+Services Overview
+Service
+Purpose
+app
+Runs the Next.js frontend and backend (API routes). Connects to PostgreSQL and Redis using internal network aliases.
+db
+Hosts PostgreSQL database storing user, business, and trust score data.
+redis
+Provides caching and session management for faster analytics and authentication.
+Interconnection
+The depends_on field ensures the database and Redis containers start before the Next.js app begins running.
+
+The environment section in the app container shares connection URLs for the database and Redis service.
+
+Example:
+environment:
+  - DATABASE_URL=postgres://postgres:password@db:5432/mydb
+  - REDIS_URL=redis://redis:6379
+
+Here, db and redis refer to service names, not IPs — Docker automatically resolves them through the shared network.
+
+🌐 Network Configuration
+The file defines a custom bridge network:
+networks:
+  localnet:
+    driver: bridge
+
+All containers (app, db, redis) connect to localnet, allowing secure internal communication via service names:
+App ↔ Database: postgres://postgres:password@db:5432/mydb
+
+App ↔ Redis: redis://redis:6379
+
+Why this matters:
+ It isolates containers from the host network, improving security and stability, while allowing seamless inter-service communication.
+
+💾 Volume Setup
+Persistent data is managed using Docker volumes:
+volumes:
+  db_data:
+
+The PostgreSQL service uses this volume:
+volumes:
+  - db_data:/var/lib/postgresql/data
+
+This ensures:
+Database data persists across container restarts.
+
+Developers can rebuild containers without losing local data.
+
+The database remains isolated from the host file system, reducing risk of corruption.
+
+
+🔐 Environment Variable Sharing
+Environment variables are passed through the environment: section in docker-compose.yml.
+
+Each container has its own set of environment variables — not visible outside its scope.
+
+Sensitive data like DATABASE_URL and REDIS_URL are used internally (never exposed to the frontend).
+
+For production and CI/CD, these values are replaced with secrets managed via AWS or Azure environment configuration.
+
+Example:
+environment:
+  - NODE_ENV=production
+  - DATABASE_URL=${DATABASE_URL}
+  - REDIS_URL=${REDIS_URL}
+
+(Using ${VARIABLE} allows automatic loading from a .env file.)
+
+
