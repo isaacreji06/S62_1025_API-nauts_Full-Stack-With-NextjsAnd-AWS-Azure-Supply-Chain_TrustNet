@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     try{
         const {to,subject,message}=await req.json();
         const emailData={
-            to:"isaacreji2006@gmail.com",
+            to,
             from:process.env.SENDGRID_SENDER!,
             subject,
             html:message,
