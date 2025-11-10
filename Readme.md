@@ -579,6 +579,87 @@ environment:
 
 (Using ${VARIABLE} allows automatic loading from a .env file.)
 
+# Error Handling Middleware
+
+This project implements a centralized error handling system for Next.js applications that provides consistent error responses, structured logging, and environment-aware error details.
+
+## Architecture
+
+``` bash
+
+app/
+├── api/
+│ ├── users/
+│ │ ├── route.ts
+│ ├── test/
+│ │ ├── errors/route.ts
+├── lib/
+│ ├── logger.ts # Structured logging utility
+│ ├── errorHandler.ts # Centralized error handler
+│ ├── customErrors.ts # Custom error classes
+
+```
+
+## Features
+
+### 1. Structured Logging
+- JSON-formatted logs for easy parsing
+- Environment-aware stack trace handling
+- Consistent log structure across all errors
+
+### 2. Custom Error Classes
+- `AppError` - Base error class
+- `ValidationError` - Input validation failures (400)
+- `NotFoundError` - Resource not found (404)
+- `AuthenticationError` - Auth failures (401)
+- `AuthorizationError` - Permission issues (403)
+- `DatabaseError` - Database operations (500)
+
+### 3. Environment-Aware Responses
+
+#### Development Mode
+
+```json
+{
+  "success": false,
+  "message": "User with ID 999 not found",
+  "error": {
+    "code": "NOT_FOUND"
+  },
+  "timestamp": "2025-10-30T10:00:00.000Z",
+  "stack": "Error: User with ID 999 not found at ..."
+}
+```
+
+#### Production Mode
+
+``` json
+
+{
+  "success": false,
+  "message": "User with ID 999 not found",
+  "error": {
+    "code": "NOT_FOUND"
+  },
+  "timestamp": "2025-10-30T10:00:00.000Z"
+}
+ 
+```
+
+### 4. Testing Error Scenarios
+
+Visit these endpoints to test different error types:
+
+- /api/test/errors?type=validation - Validation error
+
+- /api/test/errors?type=not-found - Not found error
+
+- /api/test/errors?type=authentication - Authentication error
+
+- /api/test/errors?type=database - Database error
+
+- /api/test/errors?type=unknown - Generic error
+
 ## API ROUTE STRUCTURE
 
 app/
