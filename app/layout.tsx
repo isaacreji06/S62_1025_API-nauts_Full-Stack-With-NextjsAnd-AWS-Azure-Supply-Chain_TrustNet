@@ -25,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${robotoMono.variable} antialiased`}>
+    <html lang="en" className="transition-colors duration-300">
+      <body className={`${inter.variable} ${robotoMono.variable} antialiased bg-[#f5f8ff] text-gray-900 dark:bg-gray-950 dark:text-gray-100 transition-colors duration-300`}>
         <Navbar />
         {children}
       </body>

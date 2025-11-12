@@ -1,48 +1,121 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { auth, RecaptchaVerifier, signInWithPhoneNumber } from "../../firebase";
+import type { ConfirmationResult } from "firebase/auth";
+
+declare global {
+  interface Window {
+    recaptchaVerifier: RecaptchaVerifier | undefined;
+  }
+}
 
 export default function LoginPage() {
   const [sendOtp, setSendOtp] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState("");
-  const [confirmationResult, setConfirmationResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false); // 👈 added loading state
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const recaptchaInitialized = useRef(false);
 
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = e.target.value.replace(/\D/g, "");
     setPhoneNumber(numericValue);
   };
 
-  const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
+  // Safe console logging function to avoid Next.js errors
+  const safeLog = (message: string, data?: any) => {
+    if (typeof window === "undefined") return;
+    
+    try {
+      if (data) {
+        // Convert to plain object to avoid Promise/enumeration issues
+        const plainData = JSON.parse(JSON.stringify(data, (key, value) => {
+          // Handle special cases
+          if (value instanceof Promise) return "[Promise]";
+          if (typeof value === "function") return "[Function]";
+          if (value instanceof HTMLElement) return "[HTMLElement]";
+          return value;
+        }));
+        console.log(message, plainData);
+      } else {
+        console.log(message);
+      }
+    } catch (error) {
+      console.log(message, "[Unable to serialize data]");
+    }
+  };
+
+  const setupRecaptcha = (): RecaptchaVerifier | null => {
+    if (typeof window === "undefined") return null;
+
+    try {
+      // Clear existing reCAPTCHA
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (error) {
+          safeLog("Error clearing old reCAPTCHA:", error);
+        }
+      }
+
+      safeLog("Initializing reCAPTCHA with auth:", { 
+        appName: auth.app?.name,
+        config: auth.app?.options 
+      });
+      
       window.recaptchaVerifier = new RecaptchaVerifier(
         auth,
         "recaptcha-container",
         {
-          size: "invisible",
-          callback: () => console.log("Recaptcha verified"),
+          size: "normal" as const,
+          callback: (response: string) => {
+            safeLog("reCAPTCHA solved:", response);
+          },
+          "expired-callback": () => {
+            safeLog("reCAPTCHA expired");
+            toast.info("Security check expired. Please refresh and try again.");
+          },
         }
       );
+
+      recaptchaInitialized.current = true;
+      safeLog("reCAPTCHA initialized successfully");
+      return window.recaptchaVerifier;
+
+    } catch (error: any) {
+      safeLog("Error setting up reCAPTCHA:", error);
+      toast.error(`reCAPTCHA setup failed: ${error.message}`);
+      return null;
     }
   };
 
   const sendOtpFunction = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (phoneNumber.length < 10) {
-      toast.error("Please enter a valid phone number");
+      toast.error("Please enter a valid 10-digit phone number");
       return;
     }
 
-    setupRecaptcha();
-    const appVerifier = window.recaptchaVerifier;
-
     try {
-      setLoading(true); // 👈 start loading
-      const fullNumber = phoneNumber.startsWith("+")
-        ? phoneNumber
-        : `+91${phoneNumber}`;
+      setLoading(true);
+      safeLog("Starting OTP send process...");
+
+      // Initialize reCAPTCHA
+      const appVerifier = setupRecaptcha();
+      if (!appVerifier) {
+        toast.error("Security verification failed");
+        return;
+      }
+
+      const fullNumber = `+91${phoneNumber}`;
+      safeLog("Sending OTP to:", fullNumber);
+      safeLog("Using auth instance:", { 
+        appName: auth.app?.name,
+        configKeys: Object.keys(auth.app?.options || {}) 
+      });
+      safeLog("Using appVerifier type:", typeof appVerifier);
 
       const confirmation = await signInWithPhoneNumber(
         auth,
@@ -53,18 +126,61 @@ export default function LoginPage() {
       setConfirmationResult(confirmation);
       setSendOtp(true);
       toast.success("OTP sent successfully!");
+      
     } catch (err: any) {
-      console.error(err);
-      toast.error("Failed to send OTP. Try again.");
+      safeLog("Full error details:", {
+        code: err.code,
+        message: err.message,
+        name: err.name
+      });
+      
+      // Specific handling for app credential issues
+      if (err.code === 'auth/invalid-app-credential') {
+        toast.error("Firebase configuration error. Please check:");
+        toast.error("1. Firebase Project Settings");
+        toast.error("2. Phone Auth is enabled");
+        toast.error("3. Authorized domains are set");
+        
+        // Log Firebase config status (safely)
+        safeLog("Firebase config status:", {
+          apiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+          authDomain: !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+          projectId: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+          appId: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+        });
+      } else {
+        switch (err.code) {
+          case 'auth/invalid-phone-number':
+            toast.error("Invalid phone number format");
+            break;
+          case 'auth/quota-exceeded':
+            toast.error("Too many attempts. Please try again later.");
+            break;
+          case 'auth/captcha-check-failed':
+            toast.error("Security verification failed. Please try again.");
+            break;
+          case 'auth/too-many-requests':
+            toast.error("Too many requests. Please try again later.");
+            break;
+          default:
+            toast.error(err.message || "Failed to send OTP");
+        }
+      }
     } finally {
-      setLoading(false); // 👈 stop loading
+      setLoading(false);
     }
   };
 
   const verifyOtpFunction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!otp) {
-      toast.error("Please enter the OTP");
+
+    if (!otp || otp.length < 6) {
+      toast.error("Please enter a valid 6-digit OTP");
+      return;
+    }
+
+    if (!confirmationResult) {
+      toast.error("No OTP verification in progress. Please request a new OTP.");
       return;
     }
 
@@ -73,6 +189,8 @@ export default function LoginPage() {
       const result = await confirmationResult.confirm(otp);
       const user = result.user;
       const idToken = await user.getIdToken();
+
+      safeLog("User authenticated:", { uid: user.uid });
 
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
@@ -83,48 +201,81 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (data.success) {
-        toast.success("OTP verified successfully!");
+        toast.success("Login successful!");
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 1000);
       } else {
         toast.error(data.message || "Verification failed");
       }
     } catch (err: any) {
-      console.error(err);
-      toast.error("Invalid OTP");
+      safeLog("Error verifying OTP:", {
+        code: err.code,
+        message: err.message
+      });
+      
+      if (err.code === 'auth/invalid-verification-code') {
+        toast.error("Invalid OTP code");
+      } else if (err.code === 'auth/code-expired') {
+        toast.error("OTP has expired. Please request a new one.");
+        setSendOtp(false);
+      } else {
+        toast.error("Invalid OTP. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-[#f5f8ff]">
-      <div className="mt-24 bg-white p-10 rounded-2xl shadow-md w-full max-w-md text-center">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">Welcome Back</h2>
-        <p className="text-gray-600 mb-8">
+    <div className="min-h-screen flex flex-col justify-center items-center bg-[#f5f8ff] dark:bg-gray-900 px-4 sm:px-6 lg:px-8">
+      <div className="bg-white dark:bg-gray-800 p-8 sm:p-10 rounded-2xl shadow-md w-full max-w-sm sm:max-w-md text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mb-2">
+          Welcome Back
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6 sm:mb-8 text-sm sm:text-base">
           Sign in to continue to{" "}
-          <span className="text-blue-600 font-semibold">TrustNet</span>
+          <span className="text-blue-600 dark:text-blue-400 font-semibold">
+            TrustNet
+          </span>
         </p>
 
         <form
           className="flex flex-col gap-4"
           onSubmit={sendOtp ? verifyOtpFunction : sendOtpFunction}
         >
-          <input
-            type="text"
-            placeholder="Phone Number"
-            required
-            value={phoneNumber}
-            onChange={handlePhoneNumberChange}
-            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+              +91
+            </span>
+            <input
+              type="text"
+              placeholder="Phone Number"
+              required
+              value={phoneNumber}
+              onChange={handlePhoneNumberChange}
+              maxLength={10}
+              className="border border-gray-300 dark:border-gray-600 
+                         bg-white dark:bg-gray-700 
+                         text-gray-900 dark:text-gray-100 
+                         rounded-lg pl-12 pr-4 py-2 sm:py-3 text-sm sm:text-base 
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 transition w-full"
+            />
+          </div>
 
           {sendOtp && (
             <input
               type="text"
-              placeholder="Enter the OTP"
+              placeholder="Enter 6-digit OTP"
               required
               value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              maxLength={6}
+              className="border border-gray-300 dark:border-gray-600 
+                         bg-white dark:bg-gray-700 
+                         text-gray-900 dark:text-gray-100 
+                         rounded-lg px-4 py-2 sm:py-3 text-sm sm:text-base 
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             />
           )}
 
@@ -132,8 +283,10 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             className={`${
-              loading ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-            } text-white font-medium py-2 rounded-lg transition flex justify-center items-center gap-2`}
+              loading
+                ? "bg-blue-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
+            } text-white font-medium py-2 sm:py-3 rounded-lg transition flex justify-center items-center gap-2 text-sm sm:text-base`}
           >
             {loading ? (
               <>
@@ -157,7 +310,7 @@ export default function LoginPage() {
                     d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
                   ></path>
                 </svg>
-                Processing...
+                {sendOtp ? "Verifying..." : "Sending..."}
               </>
             ) : sendOtp ? (
               "Verify OTP"
@@ -166,12 +319,16 @@ export default function LoginPage() {
             )}
           </button>
 
+          {/* reCAPTCHA container */}
           <div id="recaptcha-container"></div>
         </form>
 
-        <p className="text-gray-600 mt-6 text-sm">
-          Don’t have an account?{" "}
-          <a href="/register" className="text-blue-600 hover:underline">
+        <p className="text-gray-600 dark:text-gray-400 mt-6 text-xs sm:text-sm">
+          Don't have an account?{" "}
+          <a
+            href="/register"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
+          >
             Register
           </a>
         </p>
