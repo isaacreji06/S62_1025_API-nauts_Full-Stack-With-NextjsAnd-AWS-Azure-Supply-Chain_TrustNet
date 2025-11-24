@@ -1,29 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
+import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
 
-// FIX: This tells Next.js to expect an 'id' parameter
-export async function generateStaticParams() {
-  return []; // Return empty array for dynamic routes
-}
-
-// FIX: Use the correct parameter structure
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest, // Add underscore to indicate unused parameter
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // FIX: Await the params
-    const params = await context.params;
-    const { id } = params;
-
-    console.log("Business ID:", id);
-
-    if (!id) {
-      return NextResponse.json(
-        { error: "Business ID is required" },
-        { status: 400 }
-      );
-    }
+    const { id } = await context.params;
 
     const business = await prisma.business.findUnique({
       where: { id },
@@ -46,41 +30,23 @@ export async function GET(
     });
 
     if (!business) {
-      return NextResponse.json(
-        { error: "Business not found" },
-        { status: 404 }
-      );
+      return sendError("Business not found", "BUSINESS_NOT_FOUND", 404);
     }
 
-    return NextResponse.json(business);
+    return sendSuccess(business);
   } catch (error) {
     console.error("Get business error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return sendError("Internal server error", "INTERNAL_ERROR", 500);
   }
 }
 
 export async function PUT(
-  request: NextRequest,
+  request: NextRequest, // This one is used, so keep as is
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // FIX: Await the params
-    const params = await context.params;
-    const { id } = params;
-
-    console.log("Updating business ID:", id);
-
-    if (!id) {
-      return NextResponse.json(
-        { error: "Business ID is required" },
-        { status: 400 }
-      );
-    }
-
-    const body = await request.json();
+    const { id } = await context.params;
+    const body = await request.json(); // request is used here
 
     const business = await prisma.business.update({
       where: { id },
@@ -90,12 +56,9 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(business);
+    return sendSuccess(business);
   } catch (error) {
     console.error("Update business error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return sendError("Internal server error", "INTERNAL_ERROR", 500);
   }
 }

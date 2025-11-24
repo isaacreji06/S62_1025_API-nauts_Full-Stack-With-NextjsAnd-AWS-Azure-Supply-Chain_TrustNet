@@ -19,6 +19,7 @@ import {
   AdvancedQueryOptimizer,
   QueryResultTransformer,
 } from "@/lib/query-optimization";
+import { CacheStrategies, CACHE_CONFIG } from "@/lib/cache-strategies";
 
 const businessSchema = z.object({
   name: z.string().min(1).max(100),
@@ -51,6 +52,32 @@ async function GET(request: NextRequest) {
   const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || "desc";
   const viewType =
     (searchParams.get("view") as "list" | "detail" | "card") || "list";
+
+  // Check cache first
+  const cacheParams = {
+    page,
+    limit,
+    category,
+    verified,
+    search,
+    sortBy,
+    sortOrder,
+    viewType,
+  };
+  const cacheResult = await CacheStrategies.getBusinessList(cacheParams);
+
+  if (cacheResult.source === "cache") {
+    const duration = trackQuery();
+    return sendSuccess({
+      ...cacheResult.data,
+      performance: {
+        ...cacheResult.data.performance,
+        queryTime: duration,
+        cached: true,
+        source: "redis",
+      },
+    });
+  }
 
   // Build base where clause
   const baseWhere = QueryOptimizer.buildWhereClause({
@@ -99,7 +126,7 @@ async function GET(request: NextRequest) {
       ? QueryResultTransformer.transformBusinesses(businesses)
       : businesses;
 
-  return sendSuccess({
+  const responseData = {
     businesses: transformedBusinesses,
     pagination: {
       page,
@@ -112,54 +139,15 @@ async function GET(request: NextRequest) {
       optimized: true,
       complexity: queryAnalysis.complexity,
       warnings: queryAnalysis.warnings,
+      cached: false,
+      source: "database",
     },
-  });
-}
-
-/**
- * Batch create businesses (for admin/seeding)
- */
-async function batchCreateBusinesses(businessesData: any[]) {
-  const operations = businessesData.map((businessData, index) => async () => {
-    try {
-      return await executeTransaction(async (tx) => {
-        const business = await tx.business.create({
-          data: businessData,
-        });
-
-        await tx.businessAnalytics.create({
-          data: {
-            businessId: business.id,
-            totalReviews: 0,
-            averageRating: 0,
-            totalEndorsements: 0,
-            monthlyVisits: 0,
-            upiTransactionVolume: 0,
-            customerRetentionRate: 0,
-          },
-        });
-
-        return business;
-      });
-    } catch (error) {
-      console.error(`Failed to create business at index ${index}:`, error);
-      throw error;
-    }
-  });
-
-  const { results, errors } = await batchOperationsWithProgress(
-    operations,
-    5, // Process 5 at a time
-    (completed, total) => {
-      console.log(`Batch progress: ${completed}/${total}`);
-    }
-  );
-
-  return {
-    created: results.length,
-    errors: errors.length,
-    errorDetails: errors,
   };
+
+  // Cache the result
+  await CacheStrategies.setBusinessList(cacheParams, responseData);
+
+  return sendSuccess(responseData);
 }
 
 async function POST(request: NextRequest) {
@@ -176,6 +164,10 @@ async function POST(request: NextRequest) {
     }
 
     const result = await batchCreateBusinesses(body);
+
+    // Invalidate cache after batch creation
+    await CacheStrategies.invalidateAll();
+
     return sendSuccess(result, `Batch created ${result.created} businesses`);
   }
 
@@ -193,7 +185,6 @@ async function POST(request: NextRequest) {
     throw new ConflictError("Business with this name or phone already exists");
   }
 
-  // Use transaction for atomic business creation with analytics
   const result = await executeTransaction(
     async (tx) => {
       // Create business
@@ -225,7 +216,49 @@ async function POST(request: NextRequest) {
     }
   );
 
+  // Invalidate cache after creation
+  await CacheStrategies.invalidateBusiness(result.id);
+
   return sendSuccess(result, "Business created successfully", 201);
+}
+
+// Add PUT and DELETE handlers with cache invalidation
+async function PUT(request: NextRequest, context: { params: { id: string } }) {
+  const { id } = context.params;
+  const body = await request.json();
+
+  const result = await executeTransaction(async (tx) => {
+    return await tx.business.update({
+      where: { id },
+      data: body,
+      include: {
+        owner: { select: { name: true, phone: true } },
+      },
+    });
+  });
+
+  // Invalidate cache after update
+  await CacheStrategies.invalidateBusiness(id);
+
+  return sendSuccess(result, "Business updated successfully");
+}
+
+async function DELETE(
+  request: NextRequest,
+  context: { params: { id: string } }
+) {
+  const { id } = context.params;
+
+  await executeTransaction(async (tx) => {
+    await tx.business.delete({
+      where: { id },
+    });
+  });
+
+  // Invalidate cache after deletion
+  await CacheStrategies.invalidateBusiness(id);
+
+  return sendSuccess(null, "Business deleted successfully");
 }
 
 export const GETHandler = withErrorHandler(GET, "businesses-get");

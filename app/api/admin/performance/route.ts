@@ -1,51 +1,36 @@
-// app/api/admin/performance/route.ts
-import { NextRequest } from "next/server";
-import { QueryMonitor } from "@/lib/query-optimization";
-import { withErrorHandler } from "@/lib/errorHandler";
+import { QueryMonitor } from "@/lib/queryMonitor";
 import { sendSuccess } from "@/lib/responseHandler";
 
-async function GET(request: NextRequest) {
+async function GET() {
   const stats = QueryMonitor.getStats();
 
   // Analyze performance trends
   const analysis = {
-    totalQueries: stats.reduce((sum, stat) => sum + stat.count, 0),
-    averageQueryTime:
-      stats.reduce((sum, stat) => sum + stat.avgTime, 0) / stats.length,
-    slowQueries: stats.filter((stat) => stat.avgTime > 1000),
-    mostFrequent: stats.sort((a, b) => b.count - a.count).slice(0, 10),
-    slowest: stats.sort((a, b) => b.avgTime - a.avgTime).slice(0, 10),
+    slowestQueries: stats.queries
+      .filter((q: any) => q.duration > 100)
+      .sort((a: any, b: any) => b.duration - a.duration)
+      .slice(0, 5),
+    mostFrequentQueries: stats.queries
+      .reduce((acc: any, query: any) => {
+        const key = query.operation;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {}),
+    averageResponseTime: stats.queries.reduce((sum: number, q: any) => sum + q.duration, 0) / stats.queries.length,
   };
 
   return sendSuccess({
-    timestamp: new Date().toISOString(),
-    stats,
-    analysis,
-    recommendations: generatePerformanceRecommendations(analysis),
+    data: {
+      summary: {
+        totalQueries: stats.queries.length,
+        uniqueOperations: new Set(stats.queries.map((q: any) => q.operation)).size,
+        monitoringSince: stats.startTime,
+      },
+      analysis,
+      recentQueries: stats.queries.slice(-10), // Last 10 queries
+    },
+    message: "Performance metrics retrieved successfully",
   });
 }
 
-function generatePerformanceRecommendations(analysis: any): string[] {
-  const recommendations: string[] = [];
-
-  if (analysis.averageQueryTime > 500) {
-    recommendations.push(
-      "Consider adding database indexes for frequently queried fields"
-    );
-  }
-
-  if (analysis.slowQueries.length > 5) {
-    recommendations.push("Implement query caching for slow endpoints");
-  }
-
-  if (analysis.mostFrequent[0]?.count > 1000) {
-    recommendations.push(
-      "High frequency queries detected - consider implementing request deduplication"
-    );
-  }
-
-  return recommendations;
-}
-
-export const GETHandler = withErrorHandler(GET, "performance-stats");
-export { GETHandler as GET };
+export { GET };

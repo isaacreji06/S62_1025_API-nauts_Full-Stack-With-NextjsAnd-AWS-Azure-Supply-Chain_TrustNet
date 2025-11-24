@@ -1,9 +1,9 @@
 // app/api/auth/verify-otp/route.ts
-import { NextResponse } from "next/server";
+// import { NextResponse } from "next/server";
 import admin from "firebase-admin";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ValidationError, AuthenticationError } from "@/lib/customErrors";
-import { withErrorHandler } from "@/lib/errorHandler";
+import { sendSuccess } from "@/lib/responseHandler";
+import { ValidationError } from "@/lib/customErrors";
+// import { withErrorHandler } from "@/lib/errorHandler";
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -17,25 +17,23 @@ if (!admin.apps.length) {
 }
 
 export async function POST(req: Request) {
+  const { idToken } = await req.json();
+  if (!idToken) {
+    throw new ValidationError("ID token is required");
+  }
 
-    const { idToken } = await req.json();
-    if (!idToken) {
-      throw new ValidationError("ID token is required");
-    }
+  const decoded = await admin.auth().verifyIdToken(idToken);
+  // decoded contains uid, phone_number, email, etc.
+  // Here: create or fetch a user in your DB, create app session cookie/jwt if desired.
 
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    // decoded contains uid, phone_number, email, etc.
-    // Here: create or fetch a user in your DB, create app session cookie/jwt if desired.
-
-    return sendSuccess(
-      {
-        user: {
-          uid: decoded.uid,
-          phone: decoded.phone_number,
-          email: decoded.email,
-        },
+  return sendSuccess(
+    {
+      user: {
+        uid: decoded.uid,
+        phone: decoded.phone_number,
+        email: decoded.email,
       },
-      "OTP verified successfully"
-    );
-  
+    },
+    "OTP verified successfully"
+  );
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import { redis } from "@/lib/redis";
 
 export async function GET() {
   try {
@@ -20,6 +20,9 @@ export async function GET() {
 
     return NextResponse.json(users);
   } catch (error) {
-    return NextResponse.json({ success: false, message: "Failed to fetch users", error }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Failed to fetch users", error },
+      { status: 500 }
+    );
   }
 }
