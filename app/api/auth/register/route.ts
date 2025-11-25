@@ -1,13 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { z } from "zod";
-import { sendSuccess } from "@/lib/responseHandler";
-import {
-  ValidationError,
-  ConflictError,
-  DatabaseError,
-} from "@/lib/customErrors";
-import { withErrorHandler } from "@/lib/errorHandler";
+import { sendSuccess, sendError } from "@/lib/responseHandler"; // Import sendError too
 
 const registerSchema = z.object({
   phone: z.string().min(10),
@@ -16,26 +10,10 @@ const registerSchema = z.object({
   role: z.enum(["CUSTOMER", "BUSINESS_OWNER"]).default("CUSTOMER"),
 });
 
-async function POST(request: NextRequest) {
-  
+export async function POST(request: NextRequest) {
+  try {
     const body = await request.json();
-
-    // Parse and validate with custom error handling
-    let validatedData;
-    try {
-      validatedData = registerSchema.parse(body);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const formattedErrors = error.errors.map((err) => ({
-          field: err.path.join("."),
-          message: err.message,
-        }));
-        throw new ValidationError("Validation failed", formattedErrors);
-      }
-      throw error;
-    }
-
-    const { phone, name, businessName, role } = validatedData;
+    const { phone, name, businessName, role } = registerSchema.parse(body);
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -43,7 +21,11 @@ async function POST(request: NextRequest) {
     });
 
     if (existingUser) {
-      throw new ConflictError("User already exists with this phone number");
+      return sendError(
+        "User already exists with this phone number",
+        "USER_EXISTS",
+        400
+      );
     }
 
     // Create user
@@ -81,7 +63,17 @@ async function POST(request: NextRequest) {
       "User registered successfully",
       201
     );
-  } 
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return sendError(
+        "Invalid input data",
+        "VALIDATION_ERROR",
+        400,
+        error.issues
+      );
+    }
 
-  export const POSTHandler = withErrorHandler(POST, "auth-register");
-  export { POSTHandler as POST };
+    console.error("Registration error:", error);
+    return sendError("Internal server error", "INTERNAL_ERROR", 500);
+  }
+}

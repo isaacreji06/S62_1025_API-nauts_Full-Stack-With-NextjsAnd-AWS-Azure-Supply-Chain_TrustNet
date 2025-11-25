@@ -1,20 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { sendSuccess } from "@/lib/responseHandler";
-import {
-  ValidationError,
-  NotFoundError,
-  DatabaseError,
-} from "@/lib/customErrors";
-import { withErrorHandler } from "@/lib/errorHandler";
-import { sanitizeInput } from "../../../../../utils/sanitize"
-
-export default async function handler(req, res) {
-  const cleanComment = sanitizeInput(req.body.comment);
-  await prisma.comments.create({ data: { text: cleanComment } });
-  res.status(200).json({ message: 'Comment added safely!' });
-}
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { sanitizeInput } from "@/utils/sanitize";
 
 const reviewSchema = z.object({
   rating: z.number().min(1).max(5),
@@ -22,21 +10,15 @@ const reviewSchema = z.object({
   reviewerId: z.string(),
 });
 
-// FIX: Add generateStaticParams for Next.js App Router
-export async function generateStaticParams() {
-  return [];
+// FIX: Update the Context interface to use Promise
+interface Context {
+  params: Promise<{ id: string }>;
 }
 
-// FIX: Use the correct parameter structure
-async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  
+export async function GET(request: NextRequest, context: Context) {
+  try {
     // FIX: Await the params
-    const params = await context.params;
-    const { id } = params;
-
+    const { id } = await context.params;
     const { searchParams } = new URL(request.url);
     const page = Number(searchParams.get("page")) || 1;
     const limit = Number(searchParams.get("limit")) || 5;
@@ -65,18 +47,16 @@ async function GET(
         pages: Math.ceil(total / limit),
       },
     });
-  
+  } catch (error) {
+    console.error("Get reviews error:", error);
+    return sendError("Internal server error", "INTERNAL_ERROR", 500);
+  }
 }
 
-async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  
+export async function POST(request: NextRequest, context: Context) {
+  try {
     // FIX: Await the params
-    const params = await context.params;
-    const { id } = params;
-
+    const { id } = await context.params;
     const body = await request.json();
     const { rating, comment, reviewerId } = reviewSchema.parse(body);
 
@@ -86,16 +66,19 @@ async function POST(
     });
 
     if (!business) {
-      throw new NotFoundError("Business");
+      return sendError("Business not found", "BUSINESS_NOT_FOUND", 404);
     }
+
+    // Sanitize comment if provided
+    const sanitizedComment = comment ? sanitizeInput(comment) : undefined;
 
     const review = await prisma.review.create({
       data: {
         rating,
-        comment,
+        comment: sanitizedComment,
         businessId: id,
         reviewerId,
-        isVerified: true, // Auto-verify for now
+        isVerified: true,
       },
       include: {
         reviewer: { select: { name: true } },
@@ -106,40 +89,43 @@ async function POST(
     await updateBusinessAnalytics(id);
 
     return sendSuccess(review, "Review created successfully", 201);
-  
-}
-
-async function updateBusinessAnalytics(businessId: string) {
-  try {
-    const reviews = await prisma.review.findMany({
-      where: { businessId },
-    });
-
-    const averageRating =
-      reviews.length > 0
-        ? reviews.reduce((sum, review) => sum + review.rating, 0) /
-          reviews.length
-        : 0;
-
-    await prisma.businessAnalytics.upsert({
-      where: { businessId },
-      update: {
-        totalReviews: reviews.length,
-        averageRating,
-        lastUpdated: new Date(),
-      },
-      create: {
-        businessId,
-        totalReviews: reviews.length,
-        averageRating,
-        lastUpdated: new Date(),
-      },
-    });
   } catch (error) {
-    throw new DatabaseError("Failed to update business analytics", error);
+    if (error instanceof z.ZodError) {
+      return sendError(
+        "Invalid review data",
+        "VALIDATION_ERROR",
+        400,
+        error.issues
+      );
+    }
+
+    console.error("Create review error:", error);
+    return sendError("Internal server error", "INTERNAL_ERROR", 500);
   }
 }
 
-export const GETHandler = withErrorHandler(GET, "business-reviews-get");
-export const POSTHandler = withErrorHandler(POST, "business-reviews-create");
-export { GETHandler as GET, POSTHandler as POST };
+async function updateBusinessAnalytics(businessId: string) {
+  const reviews = await prisma.review.findMany({
+    where: { businessId },
+  });
+
+  const averageRating =
+    reviews.length > 0
+      ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
+      : 0;
+
+  await prisma.businessAnalytics.upsert({
+    where: { businessId },
+    update: {
+      totalReviews: reviews.length,
+      averageRating,
+      lastUpdated: new Date(),
+    },
+    create: {
+      businessId,
+      totalReviews: reviews.length,
+      averageRating,
+      lastUpdated: new Date(),
+    },
+  });
+}

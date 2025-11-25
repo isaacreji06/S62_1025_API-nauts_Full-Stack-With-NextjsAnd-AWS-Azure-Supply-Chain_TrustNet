@@ -32,7 +32,9 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
-, "app/users/loading.js", "utils/sanitize.js"  ],
+    "**/*.mts",
+    "app/users/loading.js",
+    "app/utils/sanitize.ts"
+  ],
   "exclude": ["node_modules"]
 }
