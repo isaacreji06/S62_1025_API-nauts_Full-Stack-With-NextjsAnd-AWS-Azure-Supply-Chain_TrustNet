@@ -15,7 +15,6 @@ import {
   Shield,
   MessageSquare,
   AlertCircle,
-  LogOut,
   Building
 } from 'lucide-react';
 
@@ -118,11 +117,6 @@ export default function BusinessOwnerDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    router.push('/login');
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -156,15 +150,6 @@ export default function BusinessOwnerDashboard() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Business Dashboard</h1>
               <p className="text-sm text-gray-600">Manage your business and track performance</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handleLogout}
-                className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-900 border rounded-lg hover:bg-gray-50"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="text-sm">Logout</span>
-              </button>
             </div>
           </div>
         </div>

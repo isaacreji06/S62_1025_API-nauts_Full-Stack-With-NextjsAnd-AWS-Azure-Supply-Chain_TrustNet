@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireBusinessOwner } from '@/lib/middleware/roleCheck';
+import { requireAuth } from '@/lib/middleware/roleCheck';
 import { sendError, sendSuccess } from '@/lib/responseHandler';
 import { z } from 'zod';
 
@@ -33,21 +33,21 @@ const settingsSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication and role
-    const authResult = requireBusinessOwner(request);
+    // Verify authentication for any user role
+    const authResult = requireAuth(request);
     if ('error' in authResult) {
       return sendError(authResult.error, "UNAUTHORIZED", authResult.status || 401);
     }
 
-    const { userId } = authResult;
+    const { userId, role } = authResult;
 
-    // Find user and business settings
+    // Find user
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        businesses: {
-          take: 1, // Get the first business for now
-        }
+        businesses: role === 'BUSINESS_OWNER' ? {
+          take: 1, // Get the first business for business owners
+        } : false
       }
     });
 
@@ -55,21 +55,11 @@ export async function GET(request: NextRequest) {
       return sendError("User not found", "USER_NOT_FOUND", 404);
     }
 
-    // Default settings (in production, you might store these in the database)
-    const defaultSettings = {
-      profile: {
-        visibility: 'public' as const,
-        showPhone: true,
-        showEmail: false,
-        showAddress: true,
-        allowDirectContact: true,
-      },
+    // Default settings based on user role
+    const baseSettings = {
       notifications: {
         emailNotifications: true,
         smsNotifications: false,
-        reviewAlerts: true,
-        endorsementRequests: true,
-        trustScoreChanges: true,
         weeklyReports: false,
       },
       privacy: {
@@ -83,6 +73,46 @@ export async function GET(request: NextRequest) {
       }
     };
 
+    // Role-specific settings
+    let defaultSettings;
+    
+    if (role === 'BUSINESS_OWNER') {
+      defaultSettings = {
+        ...baseSettings,
+        profile: {
+          visibility: 'public' as const,
+          showPhone: true,
+          showEmail: false,
+          showAddress: true,
+          allowDirectContact: true,
+        },
+        notifications: {
+          ...baseSettings.notifications,
+          reviewAlerts: true,
+          endorsementRequests: true,
+          trustScoreChanges: true,
+        }
+      };
+    } else {
+      // Settings for CUSTOMER and ADMIN
+      defaultSettings = {
+        ...baseSettings,
+        profile: {
+          visibility: 'local' as const,
+          showPhone: false,
+          showEmail: false,
+          showAddress: false,
+          allowDirectContact: false,
+        },
+        notifications: {
+          ...baseSettings.notifications,
+          reviewAlerts: false,
+          endorsementRequests: false,
+          trustScoreChanges: false,
+        }
+      };
+    }
+
     return sendSuccess(defaultSettings);
   } catch (error) {
     console.error('Dashboard settings GET error:', error);
@@ -92,11 +122,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication and role
-    const authResult = requireBusinessOwner(request);
+    // Verify authentication for any user role
+    const authResult = requireAuth(request);
     if ('error' in authResult) {
       return sendError(authResult.error, "UNAUTHORIZED", authResult.status || 401);
     }
+
+    const { userId, role } = authResult;
 
     // const { userId } = authResult; // Uncomment if needed
     const body = await request.json();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import BusinessCard from "@/components/BusinessCard";
+import BusinessCard from "../components/BusinessCard";
 import { Search, Filter, Loader } from "lucide-react";
 
 // Use the full business type that matches what BusinessCard expects
@@ -83,7 +83,7 @@ export default function BusinessesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

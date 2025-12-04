@@ -64,23 +64,27 @@ export default function DashboardSettingsPage() {
     }
   }, [isAuthenticated]);
 
-  const checkAuthentication = () => {
+  const checkAuthentication = async () => {
     try {
-      const token = localStorage.getItem('backendToken');
+      const token = localStorage.getItem('auth_token');
       if (!token) {
         router.push('/login');
         return;
       }
-      // Basic token format validation
-      const tokenParts = token.split('.');
-      if (tokenParts.length !== 3) {
-        localStorage.removeItem('backendToken');
+      
+      // Verify token with the API
+      const response = await fetch('/api/auth/verify');
+      
+      if (!response.ok) {
+        localStorage.removeItem('auth_token');
         router.push('/login');
         return;
       }
+      
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Authentication check failed:', error);
+      localStorage.removeItem('auth_token');
       router.push('/login');
     }
   };
@@ -92,13 +96,13 @@ export default function DashboardSettingsPage() {
       
       const response = await fetch('/api/dashboard/settings', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('backendToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
       });
       
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem('backendToken');
+          localStorage.removeItem('auth_token');
           router.push('/login');
           return;
         }
@@ -130,14 +134,14 @@ export default function DashboardSettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('backendToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
         body: JSON.stringify(settings),
       });
       
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem('backendToken');
+          localStorage.removeItem('auth_token');
           router.push('/login');
           return;
         }
