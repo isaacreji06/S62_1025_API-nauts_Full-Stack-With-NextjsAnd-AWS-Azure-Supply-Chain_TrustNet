@@ -28,6 +28,7 @@ interface Business {
 }
 
 interface SearchFilters {
+  query: string;
   category: string;
   location: string;
   minTrustScore: number;
@@ -66,38 +67,33 @@ export default function CustomerDashboard() {
 
   const checkAuthentication = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      // Basic token validation (check if it's a valid JWT format)
-      const tokenParts = token.split('.');
-      if (tokenParts.length !== 3) {
+      // Check authentication via API
+      const response = await fetch('/api/auth/verify');
+      
+      if (!response.ok) {
+        console.log('Authentication failed, redirecting to login');
         localStorage.removeItem('auth_token');
         router.push('/login');
         return;
       }
 
-      // Decode payload to get user role
-      const payload = JSON.parse(atob(tokenParts[1]));
-      setUserRole(payload.role);
+      const result = await response.json();
+      const userData = result.data;
       
-      if (payload.role !== 'CUSTOMER') {
-        // Redirect to appropriate dashboard based on role
-        if (payload.role === 'BUSINESS_OWNER') {
-          router.push('/dashboard/business');
-        } else {
-          router.push('/dashboard');
-        }
+      if (userData.user.role !== 'CUSTOMER') {
+        console.log('Access denied: not a customer');
+        router.push('/login');
         return;
       }
 
       setIsAuthenticated(true);
+      setUserRole(userData.user.role);
     } catch (error) {
+      console.error('Authentication error:', error);
       localStorage.removeItem('auth_token');
       router.push('/login');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -162,27 +158,22 @@ export default function CustomerDashboard() {
     setFilteredBusinesses(filtered);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    router.push('/login');
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-red-600 text-xl mb-4">{error}</div>
+          <div className="text-red-600 dark:text-red-400 text-xl mb-4">{error}</div>
           <button 
             onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             Try Again
           </button>
@@ -192,46 +183,40 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Discover Trusted Businesses</h1>
-              <p className="text-sm text-gray-600">Find and connect with verified businesses in your area</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Discover Trusted Businesses</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Find and connect with verified businesses in your area</p>
             </div>
             <div className="flex items-center space-x-4">
               <Link
                 href="/dashboard/customer/favorites"
-                className="text-gray-600 hover:text-gray-900"
+                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
               >
                 <Heart className="w-5 h-5" />
               </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-              >
-                <span className="text-sm">Logout</span>
-              </button>
             </div>
           </div>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 relative z-10">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6 relative z-20">
           {/* Search Bar */}
           <div className="flex items-center mb-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
               <input
                 type="text"
                 placeholder="Search businesses, categories, or locations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -241,7 +226,7 @@ export default function CustomerDashboard() {
             <select
               value={filters.category}
               onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Categories</option>
               <option value="FOOD_RESTAURANT">Food & Restaurant</option>
@@ -295,20 +280,20 @@ export default function CustomerDashboard() {
         {/* Business Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredBusinesses.map((business) => (
-            <div key={business.id} className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
+            <div key={business.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md border border-gray-200 dark:border-gray-700 transition-shadow">
               <div className="p-6">
                 {/* Business Header */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{business.name}</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{business.name}</h3>
                       {business.isVerified && (
-                        <Shield className="w-4 h-4 text-green-600" />
+                        <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">{business.category.replace('_', ' ')}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{business.category.replace('_', ' ')}</p>
                     {business.location && (
-                      <div className="flex items-center text-sm text-gray-500">
+                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                         <MapPin className="w-4 h-4 mr-1" />
                         {business.location}
                       </div>
@@ -319,7 +304,7 @@ export default function CustomerDashboard() {
                 {/* Trust Score */}
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-2">
-                    <div className="text-2xl font-bold text-green-600">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                       {business.trustScore}
                     </div>
                     <div>

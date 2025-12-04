@@ -2,45 +2,154 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Moon, Sun, User, LogOut, Settings, BarChart3 } from "lucide-react"; // icons (lucide-react is preinstalled in Next)
+import { Moon, Sun, User, LogOut, Settings, BarChart3 } from "lucide-react";
 import { useAuth } from "@/context/authContext";
+import { useUI } from "@/context/UIContext";
 
 function Navbar() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const { theme, toggleTheme } = useUI();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const { user, backendToken, loading, logout: authLogout } = useAuth();
+  const { logout: authLogout } = useAuth();
 
-  // Load stored theme from localStorage
+  // Check authentication status
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.classList.toggle("dark", savedTheme === "dark");
-    }
+    console.log('Navbar: Initial mount, checking auth status');
+    checkAuthStatus();
+    
+    // Listen for storage changes (when user logs in/out in another tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      console.log('Navbar: Storage event detected:', e.key, e.newValue ? 'token added' : 'token removed');
+      setTimeout(() => checkAuthStatus(), 100);
+    };
+    
+    // Listen for custom login event (for immediate updates)
+    const handleLoginSuccess = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      console.log('Navbar: userLoggedIn event received:', customEvent.detail);
+      setTimeout(() => checkAuthStatus(), 200);
+    };
+    
+    // Listen for route changes
+    const handleRouteChange = () => {
+      console.log('Navbar: Route change detected, checking auth');
+      if (sessionStorage.getItem('justLoggedIn') || localStorage.getItem('auth_token')) {
+        checkAuthStatus();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userLoggedIn', handleLoginSuccess);
+    window.addEventListener('popstate', handleRouteChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userLoggedIn', handleLoginSuccess);
+      window.removeEventListener('popstate', handleRouteChange);
+    };
   }, []);
 
-  // Get user role from token
+  // Check for fresh login on page focus and route changes
   useEffect(() => {
-    if (user && backendToken) {
-      try {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          const tokenParts = token.split('.');
-          if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            setUserRole(payload.role);
-          }
-        }
-      } catch (error) {
-        console.error('Error decoding token:', error);
+    const handleFocus = () => {
+      console.log('Navbar: Window focus, checking for fresh login');
+      if (sessionStorage.getItem('justLoggedIn')) {
+        checkAuthStatus();
       }
-    } else {
-      setUserRole(null);
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Check auth when pathname changes
+  useEffect(() => {
+    console.log('Navbar: Router effect triggered');
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('auth_token');
+      const justLoggedIn = sessionStorage.getItem('justLoggedIn');
+      
+      if (token || justLoggedIn) {
+        console.log('Navbar: Token or login flag found, checking auth');
+        checkAuthStatus();
+      }
     }
-  }, [user, backendToken]);
+  }, [router]);
+
+  // Check auth when component mounts or after navigation
+  useEffect(() => {
+    console.log('Navbar: Pathname effect triggered');
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('auth_token');
+      const justLoggedIn = sessionStorage.getItem('justLoggedIn');
+      
+      if (token || justLoggedIn) {
+        console.log('Navbar: Token or login flag found, checking auth');
+        checkAuthStatus();
+      }
+    }
+  }, [router]);
+
+  const checkAuthStatus = async () => {
+    try {
+      console.log('Navbar: checkAuthStatus called');
+      setLoading(true);
+      
+      // Check if user just logged in
+      const justLoggedIn = sessionStorage.getItem('justLoggedIn');
+      if (justLoggedIn) {
+        console.log('Navbar: Just logged in flag found, removing it');
+        sessionStorage.removeItem('justLoggedIn');
+        // Force a slight delay to ensure token is properly set
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
+      // First check if we have a token in localStorage
+      const token = localStorage.getItem('auth_token');
+      console.log('Navbar: Token check:', token ? 'found' : 'not found');
+      
+      if (!token) {
+        console.log('Navbar: No token found, setting unauthenticated');
+        setIsAuthenticated(false);
+        setUserRole(null);
+        setUserName(null);
+        return;
+      }
+
+      // Verify token with the API
+      console.log('Navbar: Verifying token with API');
+      const response = await fetch('/api/auth/verify');
+      
+      if (response.ok) {
+        const result = await response.json();
+        const userData = result.data;
+        
+        console.log('Navbar: Token verified successfully, user:', userData.user.name, 'role:', userData.user.role);
+        setIsAuthenticated(true);
+        setUserRole(userData.user.role);
+        setUserName(userData.user.name);
+      } else {
+        // Token is invalid
+        console.log('Navbar: Token verification failed, removing token');
+        localStorage.removeItem('auth_token');
+        setIsAuthenticated(false);
+        setUserRole(null);
+        setUserName(null);
+      }
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
+      setUserRole(null);
+      setUserName(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Close user menu when clicking outside
   useEffect(() => {
@@ -59,16 +168,25 @@ function Navbar() {
     };
   }, [showUserMenu]);
 
-  // Toggle between light/dark mode
-  const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
-  };
+  const handleLogout = async () => {
+    try {
+      // Call the logout API to clear server-side cookie
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (error) {
+      console.error("Logout API error:", error);
+    }
 
-  const handleLogout = () => {
+    // Clear client-side data
+    localStorage.removeItem('auth_token');
     setShowUserMenu(false);
+    setIsAuthenticated(false);
+    setUserRole(null);
+    setUserName(null);
+    
+    // Trigger custom logout event
+    window.dispatchEvent(new CustomEvent('userLoggedOut'));
+    
+    // Also call the auth context logout for any Firebase cleanup
     authLogout();
   };
 
@@ -77,7 +195,7 @@ function Navbar() {
   };
 
   return (
-    <nav className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 transition-colors duration-300">
+    <nav className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 transition-colors duration-300 relative z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
@@ -94,26 +212,42 @@ function Navbar() {
                 <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
                 <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
               </div>
-            ) : backendToken && user ? (
+            ) : isAuthenticated ? (
               <>
                 {/* User Menu */}
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={toggleUserMenu}
-                    className="flex items-center space-x-2 text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white font-medium p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="flex items-center space-x-2 text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white font-medium px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-w-0"
                   >
-                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                      {user.phone ? user.phone.charAt(0) : 'U'}
+                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {userName ? userName.charAt(0).toUpperCase() : 'U'}
                     </div>
-                    <span className="hidden sm:inline">{user.phone || 'User'}</span>
+                    <div className="hidden sm:flex sm:flex-col sm:items-start sm:min-w-0">
+                      <span className="text-sm font-medium truncate max-w-24 md:max-w-32">{userName || 'User'}</span>
+                      {userRole && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                          {userRole === 'BUSINESS_OWNER' ? 'Business' : userRole === 'CUSTOMER' ? 'Customer' : 'Admin'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="sm:hidden">
+                      {userRole && (
+                        <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full font-medium">
+                          {userRole === 'BUSINESS_OWNER' ? 'B' : userRole === 'CUSTOMER' ? 'C' : 'A'}
+                        </span>
+                      )}
+                    </div>
                   </button>
 
                   {/* Dropdown Menu */}
                   {showUserMenu && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
                       <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                        <p className="font-medium text-gray-900 dark:text-white">{user.phone || 'User'}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{user.uid}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{userName || 'User'}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                          {userRole ? userRole.replace('_', ' ').toLowerCase() : 'Customer'}
+                        </p>
                       </div>
                       <div className="py-2">
                         <Link

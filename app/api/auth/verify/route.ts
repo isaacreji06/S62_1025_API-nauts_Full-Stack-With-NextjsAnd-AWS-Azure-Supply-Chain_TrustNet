@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
@@ -23,10 +24,28 @@ export async function GET(request: NextRequest) {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     console.log('Decoded token:', decoded);
     
+    // Fetch user details from database
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true
+      }
+    });
+
+    if (!user) {
+      console.log('User not found in database');
+      return sendError("User not found", "USER_NOT_FOUND", 404);
+    }
+    
     const userResponse = {
       user: {
-        id: decoded.id,
-        role: decoded.role
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role
       },
       token: token
     };

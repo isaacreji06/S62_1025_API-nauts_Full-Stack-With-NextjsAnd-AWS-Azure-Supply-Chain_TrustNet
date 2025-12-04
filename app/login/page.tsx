@@ -54,6 +54,30 @@ export default function LoginPage() {
         // Verify token was stored
         const storedToken = localStorage.getItem('auth_token');
         console.log('Verified stored token:', storedToken ? 'exists' : 'NOT FOUND');
+        
+        // Multiple approaches to trigger navbar refresh
+        
+        // 1. Trigger storage event to notify navbar
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'auth_token',
+          newValue: data.token,
+          oldValue: null
+        }));
+        
+        // 2. Trigger custom login event for immediate navbar update
+        window.dispatchEvent(new CustomEvent('userLoggedIn', {
+          detail: { token: data.token, user: data.user }
+        }));
+        
+        // 3. Force a slight delay and trigger again to ensure it's caught
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('userLoggedIn', {
+            detail: { token: data.token, user: data.user }
+          }));
+        }, 100);
+        
+        // 4. Set a flag that can be checked by other components
+        sessionStorage.setItem('justLoggedIn', 'true');
       }
 
       toast.success("Login successful! Redirecting...");
@@ -61,8 +85,14 @@ export default function LoginPage() {
       // Use Next.js router for navigation instead of window.location
       setTimeout(() => {
         console.log('About to redirect to dashboard');
+        
+        // Force a final event dispatch right before navigation
+        window.dispatchEvent(new CustomEvent('userLoggedIn', {
+          detail: { token: data.token, user: data.user }
+        }));
+        
         router.push("/dashboard");
-      }, 1500); // Increased delay to ensure localStorage is updated
+      }, 1000); // Reduced delay since navbar should update immediately
     } catch (err: any) {
       toast.error(err.message || "Login failed. Please try again.");
     } finally {
@@ -72,7 +102,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center bg-[#f5f8ff] dark:bg-gray-900 px-4 sm:px-6 lg:px-8">
-      <div className="bg-white dark:bg-gray-800 p-8 sm:p-10 rounded-2xl shadow-md w-full max-w-sm sm:max-w-md text-center">
+      <div className="bg-white dark:bg-gray-800 p-8 sm:p-10 rounded-2xl shadow-md border border-gray-200 dark:border-gray-700 w-full max-w-sm sm:max-w-md text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mb-2">
           Welcome Back
         </h2>

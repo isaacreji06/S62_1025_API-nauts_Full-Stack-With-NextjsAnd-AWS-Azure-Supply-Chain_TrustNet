@@ -139,14 +139,14 @@ export default function Register() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <h1 className="text-4xl font-bold text-blue-600 mb-4">TrustNet</h1>
+            <h1 className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-4">TrustNet</h1>
           </Link>
-          <h2 className="mt-4 text-2xl font-bold text-gray-900">
+          <h2 className="mt-4 text-2xl font-bold text-gray-900 dark:text-gray-100">
             Create your account
           </h2>
           <p className="mt-2 text-base text-gray-600">

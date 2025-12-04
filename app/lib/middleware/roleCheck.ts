@@ -52,3 +52,10 @@ export function requireCustomer(req: NextRequest) {
 export function requireAdmin(req: NextRequest) {
   return requireRole(['ADMIN'])(req);
 }
+
+/**
+ * General authentication check for any authenticated user
+ */
+export function requireAuth(req: NextRequest) {
+  return requireRole(['CUSTOMER', 'BUSINESS_OWNER', 'ADMIN'])(req);
+}
