@@ -111,7 +111,7 @@ async function updateBusinessAnalytics(businessId: string) {
 
   const averageRating =
     reviews.length > 0
-      ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
+      ? reviews.reduce((sum: number, review) => sum + review.rating, 0) / reviews.length
       : 0;
 
   await prisma.businessAnalytics.upsert({
